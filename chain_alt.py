@@ -105,7 +105,7 @@ def chain_offdiag_block_hamiltonian(
     t_hop: float,
     gamma: float,
 ):
-    """Build the chain diagonal block hamiltonian"""
+    """Build the chain off-diagonal block hamiltonian"""
     g_param = gamma / t_hop
 
     aux_h_pg = h_nm(
