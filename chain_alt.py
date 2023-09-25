@@ -6,11 +6,12 @@ from scipy.special import factorial, perm
 
 RNG = np.random.default_rng(seed=1892)
 CI = complex(0, 1)
+PI = np.pi
 
 
-def c_t(matrix: np.ndarray):
+def c_t(matrix: np.ndarray) -> np.ndarray:
     """Returns the conjugate transpose of a matrix."""
-    return np.transpose(matrix.T)
+    return np.conj(matrix.T)
 
 
 def random_distribution(
@@ -59,8 +60,8 @@ def h_nm(
         accum_prod = complex(1)
 
         accum_prod *= delta[n_row - i, m_col - j]
-        accum_prod *= (-CI * g_param) ** i / factorial(i, exact=False)
-        accum_prod *= (-CI * g_param) ** j / factorial(j, exact=False)
+        accum_prod *= (CI * g_param) ** i / factorial(i, exact=False)
+        accum_prod *= (CI * g_param) ** j / factorial(j, exact=False)
         accum_prod *= p_func(j, m_col) * p_func(i, n_row)
 
         accum_sum += accum_prod
@@ -130,16 +131,20 @@ def chain_offdiag_block_hamiltonian(
 
 
 def hamiltonian(
-    n_a: int,
-    n_ph: int,
-    t_ch: float,
-    gamma: float,
-    sigma_u: float,
-    omega: float,
+    n_a: int = 4,
+    n_ph: int = 0,
+    t_ch: float = 1.0,
+    gamma: float = 0.0,
+    sigma_u: float = 0.0,
+    omega: float = 0.0,
     dist_kind: int = 1,
 ):
     """Build the chain hamiltonian."""
-    delta = np.eye(n_ph + 1)
+    # delta = np.eye(n_ph + 1)
+    delta = np.identity(
+        n=n_ph + 1,
+        dtype=complex,
+    )
     # g = gamma / t_hop
 
     u_onsite = random_distribution(
@@ -184,82 +189,113 @@ def hamiltonian(
     return h_matrix
 
 
-# def f_func(x):
-#     """Auxiliary function f(x)"""
-#     return 2 / (x + CI * np.sqrt(4 - x**2))
+def f_func(arg):
+    """Auxiliary function f(x)"""
+    return 2 / (arg + CI * np.sqrt(4 - arg**2))
 
 
-def sigma(n_a: int, n_ph: int, lead: str):
+# def sigma(
+#     energy: float,
+#     lead: str,
+#     n_a: int = 4,
+#     n_ph: int = 0,
+#     t_c: float = 1,
+#     t_s: float = 1,
+#     t_d: float = 1,
+#     # epsilon_s: float,
+#     # epsilon
+# ):
+#     """Build the retarded drain self-energy matrix."""
+#     block_matrix = np.zeros(shape=(n_a, n_a), dtype=complex)
+
+#     if lead == "s":
+#         epsilon_s = -1.0
+#         k_1 = np.arccos((epsilon_s - energy) / (2 * t_s))
+#         block_matrix[0, 0] = -t_c * np.exp(CI * k_1)
+
+#     elif lead == "d":
+#         epsilon_d = 1.0
+#         k_2 = np.arccos((epsilon_d - energy) / (2 * t_d))
+#         block_matrix[-1, -1] = -t_c * np.exp(CI * k_2)
+
+#     delta = np.eye(n_ph + 1)
+#     n_n = n_a * (n_ph + 1)
+#     matrix = np.zeros(shape=(n_n, n_n), dtype=complex)
+#     for n_row, m_col in np.ndindex(n_ph + 1, n_ph + 1):
+#         matrix += np.kron(
+#             a=np.outer(delta[:, n_row], delta[:, m_col]),
+#             b=block_matrix,
+#         )
+
+#     return matrix
+
+
+def sigma_lead(
+    energy: float,
+    lead: str,
+    n_a: int = 4,
+    # n_ph: int = 0,
+    t_c: float = 1.0,
+    t_s: float = 1.0,
+    t_d: float = 1.0,
+    # epsilon_s: float,
+    # epsilon
+):
     """Build the retarded drain self-energy matrix."""
-    k = 2 * np.pi / n_a
     block_matrix = np.zeros(shape=(n_a, n_a), dtype=complex)
-    if lead == 's':
-        block_matrix[0, 0] = np.exp(2 * CI * k)  # MUST CHANGE
-    elif lead == 'd':
-        block_matrix[-1, -1] = np.exp(2 * CI * k)  # MUST CHANGE
 
-    delta = np.eye(n_ph + 1)
-    n_n = n_a * (n_ph + 1)
-    matrix = np.zeros(shape=(n_n, n_n), dtype=complex)
-    for n_row, m_col in np.ndindex(n_ph + 1, n_ph + 1):
-        matrix += np.kron(
-            a=np.outer(delta[:, n_row], delta[:, m_col]),
-            b=block_matrix,
-        )
+    if lead == "s":
+        epsilon_s = -1.0
+        k_1 = np.arccos((epsilon_s - energy) / (2 * t_s))
+        block_matrix[0, 0] = -t_c * np.exp(CI * k_1)
 
-    return matrix
+    elif lead == "d":
+        epsilon_d = 1.0
+        k_2 = np.arccos((epsilon_d - energy) / (2 * t_d))
+        block_matrix[-1, -1] = -t_c * np.exp(CI * k_2)
+
+    # delta = np.identity(
+    #     n=n_ph + 1,
+    #     dtype=complex,
+    # )
+    # n_n = n_a * (n_ph + 1)
+    # matrix = np.zeros(shape=(n_n, n_n), dtype=complex)
+    # for n_row, m_col in np.ndindex(n_ph + 1, n_ph + 1):
+    #     matrix += np.kron(
+    #         a=np.outer(delta[:, n_row], delta[:, m_col]),
+    #         b=block_matrix,
+    #     )
+
+    return block_matrix
 
 
-def transmitance(
-    n_a: int,
-    n_ph: int,
+def green_function(
     energy: float,
     h_matrix: np.ndarray,
+    sigma_matrix: np.ndarray,
+) -> np.ndarray:
+    """Build the retarded Green's function of the chain."""
+    identity = np.identity(
+        h_matrix.shape[0],
+        dtype=complex,
+    )
+
+    return np.linalg.inv(energy * identity - h_matrix - sigma_matrix)
+
+
+def transmittance(
+    green_ret: np.ndarray,
+    gamma_s: np.ndarray,
+    gamma_d: np.ndarray,
 ):
-    """Calculate the transmittance for a given energy value."""
-    n_n = n_a * (n_ph + 1)
-    identity = np.identity(n=n_n, dtype=complex)
-
-    sigma_l = sigma(n_a, n_ph, 's') + sigma(n_a, n_ph, 'd')
-
-    gamma_s = CI * (sigma(n_a, n_ph, 's') - c_t(sigma(n_a, n_ph, 's')))
-    gamma_d = CI * (sigma(n_a, n_ph, 'd') - c_t(sigma(n_a, n_ph, 'd')))
-
-    green_ret = np.linalg.inv(energy * identity - h_matrix - sigma_l)
+    """Calculate the transmittance for the given self-energies and Green's function."""
     green_adv = c_t(green_ret)
-
     return np.trace(gamma_s @ green_ret @ gamma_d @ green_adv)
 
 
-
-def main():
-    """Main function."""
-    # l_x, n_ph, seed, distkind = 20, 2, 1892, 1
-    # t, gam, sigma_u = 1.000, 0.0001, 0.200
-    # TEMP, OMEGA = 0.0001, 0.500
-
-    # NN = l_x * (n_ph + 1)
-
-    H = hamiltonian(
-        n_a=4,
-        n_ph=2,
-        t_ch=1.0,
-        gamma=0.1,
-        sigma_u=0.0,
-        omega=1.0,
-    )
-    print(H, end="\n\n")
-
-    # eigvals, eigvecs = np.linalg.eigh(a=matrix, UPLO="U")
-    # print(eigvals, end="\n\n")
-    # print(eigvecs, end="\n\n")
-
-    np.savetxt(
-        fname="H_test_alt.txt",
-        X=H,
-        fmt="%.2e",
-    )
+# def main():
+#     """Main function."""
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
